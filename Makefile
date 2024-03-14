@@ -3,7 +3,7 @@
 # https://github.com/nanochess/tmscolor
 #
 build:
-	@cc tmscolor.c -lm -o tmscolor
+	@cc tmscolor.c pletter.c -lm -o tmscolor
 
 clean:
 	@rm tmscolor
