@@ -1,4 +1,4 @@
-# TMSColor v2.2.0
+# TMSColor v2.2.1
 *(c) Copyright 2009-2024 Óscar Toledo Gutiérrez*
 *https://nanochess.org/*
 
@@ -17,6 +17,7 @@ Converts a BMP image to TMS9928 bitmap/color format.
     -b     Generates CVBasic source code.
     -n     Removes CVBasic stub code for displaying.
     -s     Process tiles in chunks of 16 pixels high (sprites).
+    -sb    Same as above but generates readable bitmap statements (CVBasic mode)
     -t     Generates minimum of tiles required.
     -t1    Same but starting at tile 1 (0-255).
     -e45d2 Replaces color 4 with 5 and d with 2 before processing.
