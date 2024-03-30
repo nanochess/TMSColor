@@ -32,7 +32,7 @@
 #include <limits.h>
 #include <math.h>
 
-#define VERSION "2.2.0 Mar/13/2024"     /* Software version */
+#define VERSION "2.2.1 Mar/29/2024"     /* Software version */
 
 #define ROUND8(x)  ((x + 7) & ~7)
 
@@ -489,6 +489,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "    -n     Removes CVBasic stub code for displaying.\n");
         fprintf(stderr, "    -z     Output file is compressed with Pletter.\n");
         fprintf(stderr, "    -s     Process tiles in chunks of 16 pixels high (sprites).\n");
+        fprintf(stderr, "    -sb    Same as above but generates BITMAP statements.\n");
         fprintf(stderr, "    -t     Generates minimum of tiles required.\n");
         fprintf(stderr, "    -t1    Same but starting at tile 1 (0-255).\n");
         fprintf(stderr, "    -e45d2 Replaces color 4 with 5 and d with 2 before processing.\n");
@@ -529,6 +530,8 @@ int main(int argc, char *argv[])
                 bad = 1;
         } else if (c == 's') {     /* -s Sprite mode */
             sprite_mode = 1;
+            if (tolower(argv[arg][2]) == 'b')
+                sprite_mode = 2;
         } else if (c == 'e') {  /* -e Color replacement */
             char *ap1 = &argv[arg][2];
             
@@ -1225,12 +1228,46 @@ hack:
             }
         }
         if (cvbasic) {
-            fprintf(output, "\t'\n");
-            fprintf(output, "\t' Sample code:\n");
-            fprintf(output, "\t' DEFINE SPRITE %s%d,%d,%s\n", pletter ? "PLETTER " : "", 0, size_y / 16 * (size_x / 16), label);
-            fprintf(output, "\t'\n");
-            fprintf(output, "%s:\n", label);
-            generate_data(output, final_bitmap, p - final_bitmap, pletter);
+            if (sprite_mode == 2) {
+                if (pletter) {
+                    fprintf(stderr, "Warning: Sprite mode with BITMAP statements doesn't compress with Pletter\n");
+                }
+
+                fprintf(output, "\t'\n");
+                fprintf(output, "\t' Sample code:\n");
+                fprintf(output, "\t' DEFINE SPRITE %d,%d,%s\n", 0, size_y / 16 * (size_x / 16), label);
+                fprintf(output, "\t'\n");
+                fprintf(output, "%s:\n", label);
+                for (c = 0; c < p - final_bitmap; c += 32) {
+                    for (d = 0; d < 16; d++) {
+                        fprintf(output, "\tBITMAP \"%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c\"\n",
+                                (final_bitmap[c + d] & 0x80) ? 'X' : '.',
+                                (final_bitmap[c + d] & 0x40) ? 'X' : '.',
+                                (final_bitmap[c + d] & 0x20) ? 'X' : '.',
+                                (final_bitmap[c + d] & 0x10) ? 'X' : '.',
+                                (final_bitmap[c + d] & 0x08) ? 'X' : '.',
+                                (final_bitmap[c + d] & 0x04) ? 'X' : '.',
+                                (final_bitmap[c + d] & 0x02) ? 'X' : '.',
+                                (final_bitmap[c + d] & 0x01) ? 'X' : '.',
+                                (final_bitmap[c + d + 16] & 0x80) ? 'X' : '.',
+                                (final_bitmap[c + d + 16] & 0x40) ? 'X' : '.',
+                                (final_bitmap[c + d + 16] & 0x20) ? 'X' : '.',
+                                (final_bitmap[c + d + 16] & 0x10) ? 'X' : '.',
+                                (final_bitmap[c + d + 16] & 0x08) ? 'X' : '.',
+                                (final_bitmap[c + d + 16] & 0x04) ? 'X' : '.',
+                                (final_bitmap[c + d + 16] & 0x02) ? 'X' : '.',
+                                (final_bitmap[c + d + 16] & 0x01) ? 'X' : '.');
+                    }
+                    fprintf(output, "\n");
+                }
+            } else {
+                fprintf(output, "\t'\n");
+                fprintf(output, "\t' Sample code:\n");
+                fprintf(output, "\t' DEFINE SPRITE %s%d,%d,%s\n", pletter ? "PLETTER " : "", 0, size_y / 16 * (size_x / 16), label);
+                fprintf(output, "\t'\n");
+                fprintf(output, "%s:\n", label);
+                generate_data(output, final_bitmap, p - final_bitmap, pletter);
+            }
         } else {
             fprintf(output, "\t; Total sprites: %d\n", size_y / 16 * (size_x / 16));
             fprintf(output, "%s:\n", label);
@@ -1241,13 +1278,13 @@ hack:
         if (cvbasic) {
             if (size_x * size_y / 8 == 0x1800) {
                 if (remove_stub) {
-                    fprintf(output, "\t; MODE 1\n");
-                    fprintf(output, "\t; SCREEN DISABLE\n");
-                    fprintf(output, "\t; DEFINE VRAM %s$0000,$1800,%s_bitmap\n", pletter ? "PLETTER " : "", label);
-                    fprintf(output, "\t; DEFINE VRAM %s$2000,$1800,%s_color\n", pletter ? "PLETTER " : "", label);
+                    fprintf(output, "\t' MODE 1\n");
+                    fprintf(output, "\t' SCREEN DISABLE\n");
+                    fprintf(output, "\t' DEFINE VRAM %s$0000,$1800,%s_bitmap\n", pletter ? "PLETTER " : "", label);
+                    fprintf(output, "\t' DEFINE VRAM %s$2000,$1800,%s_color\n", pletter ? "PLETTER " : "", label);
                     if (magic_sprites)
-                        fprintf(output, "\t; GOSUB %s_show\n", label);
-                    fprintf(output, "\t; SCREEN ENABLE\n");
+                        fprintf(output, "\t' GOSUB %s_show\n", label);
+                    fprintf(output, "\t' SCREEN ENABLE\n");
                     fprintf(output, "\n");
                 } else {
                     fprintf(output, "\tMODE 1\n");
