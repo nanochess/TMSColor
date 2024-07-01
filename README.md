@@ -44,7 +44,7 @@ Photos will look better if the contrast is good. Magic sprites will work only wi
 
 ### Notes
 
-The current official version is v2.2.0.
+The current official version is v2.2.1.
 
 CVBasic is available from https://github.com/nanochess/CVBasic
 
