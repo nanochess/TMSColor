@@ -497,8 +497,8 @@ int main(int argc, char *argv[])
         fprintf(stderr, "    -fx    Flip image along the X-coordinate (mirror)\n");
         fprintf(stderr, "    -fy    Flip image along the Y-coordinate\n");
         fprintf(stderr, "    -m     Generates magic sprites for areas with more than 2 colors\n");
-        fprintf(stderr, "    -p1    Searchs best color combination for photo (slow)\n");
-        fprintf(stderr, "    -p2    Searchs best color combination for photo (2x2 dither) (slow)\n");
+        fprintf(stderr, "    -p1    Searches best color combination for photo (slow)\n");
+        fprintf(stderr, "    -p2    Searches best color combination for photo (2x2 dither) (slow)\n");
         fprintf(stderr, "    -o result.bmp\n");
         fprintf(stderr, "           Outputs the final image, plus highlight of errors (if any).\n");
         fprintf(stderr, "    -d     Direct copy of binary input file to output (can compress).\n");
