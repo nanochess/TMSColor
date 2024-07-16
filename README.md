@@ -24,8 +24,8 @@ Converts a BMP image to TMS9928 bitmap/color format.
     -fx    Flip image along the X-coordinate (mirror)
     -fy    Flip image along the Y-coordinate
     -m     Generates magic sprites for areas with more than 2 colors
-    -p1    Searchs best color combination for photo (slow)
-    -p2    Searchs best color combination for photo (2x2 dither) (slow)
+    -p1    Searches best color combination for photo (slow)
+    -p2    Searches best color combination for photo (2x2 dither) (slow)
     -o result.bmp
            Outputs the final image, plus highlight of errors (if any).
 
