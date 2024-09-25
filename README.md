@@ -1,4 +1,4 @@
-# TMSColor v2.2.1
+# TMSColor v2.4
 *(c) Copyright 2009-2024 Óscar Toledo Gutiérrez*
 *https://nanochess.org/*
 
@@ -46,7 +46,7 @@ Photos will look better if the contrast is good. Magic sprites will work only wi
 
 ### Notes
 
-The current official version is v2.2.1.
+The current official version is v2.4
 
 CVBasic is available from https://github.com/nanochess/CVBasic
 
