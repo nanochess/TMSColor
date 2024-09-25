@@ -32,7 +32,7 @@
 #include <limits.h>
 #include <math.h>
 
-#define VERSION "2.3 Jul/01/2024"     /* Software version */
+#define VERSION "2.4 Sep/25/2024"     /* Software version */
 
 #define ROUND8(x)  ((x + 7) & ~7)
 
@@ -380,20 +380,21 @@ double comparison(unsigned char *a, unsigned char *b)
 /*
  ** Generate db assembler data
  */
-void generate_db(FILE *output, unsigned char *data, int length, int compress)
+void generate_db(FILE *output, unsigned char *data, int width, int length, int compress)
 {
     int c;
     
     if (compress) {
         pletter(data, length, &data, &length);
+        width = 8;
     }
     for (c = 0; c < length; c++) {
-        if ((c & 7) == 0)
+        if (c % width == 0)
             fprintf(output, "\tdb ");
         else
             fprintf(output, ",");
         fprintf(output, "$%02x", data[c]);
-        if ((c & 7) == 7 || (c + 1) == length)
+        if (c % width == width - 1 || (c + 1) == length)
             fprintf(output, "\n");
     }
     if (compress) {
@@ -434,19 +435,20 @@ char *binary(int data)
 /*
  ** Generate DATA data
  */
-void generate_data(FILE *output, unsigned char *data, int length, int compress, int literal)
+void generate_data(FILE *output, unsigned char *data, int width, int length, int compress, int literal)
 {
     int c;
     
     if (compress) {
+        width = 8;
         pletter(data, length, &data, &length);
         for (c = 0; c < length; c++) {
-            if ((c & 7) == 0)
+            if (c % width == 0)
                 fprintf(output, "\tDATA BYTE ");
             else
                 fprintf(output, ",");
             fprintf(output, "$%02x", data[c]);
-            if ((c & 7) == 7 || (c + 1) == length)
+            if (c % width == width - 1 || (c + 1) == length)
                 fprintf(output, "\n");
         }
         free(data);
@@ -463,12 +465,12 @@ void generate_data(FILE *output, unsigned char *data, int length, int compress, 
         }
     } else {
         for (c = 0; c < length; c++) {
-            if ((c & 7) == 0)
+            if (c % width == 0)
                 fprintf(output, "\tDATA BYTE ");
             else
                 fprintf(output, ",");
             fprintf(output, "$%02x", data[c]);
-            if ((c & 7) == 7 || (c + 1) == length)
+            if (c % width == width - 1 || (c + 1) == length)
                 fprintf(output, "\n");
         }
     }
@@ -719,9 +721,9 @@ int main(int argc, char *argv[])
         }
         fprintf(output, "%s:\n", label);
         if (cvbasic)
-            generate_data(output, bitmap, p - bitmap, pletter, 1);
+            generate_data(output, bitmap, 8, p - bitmap, pletter, 1);
         else
-            generate_db(output, bitmap, p - bitmap, pletter);
+            generate_db(output, bitmap, 8, p - bitmap, pletter);
         fclose(output);
         exit(0);
     }
@@ -1325,27 +1327,29 @@ hack:
                 fprintf(output, "\tSCREEN %s_pattern,0,0,%d,%d,%d\n", label, size_x / 8, size_y / 8, size_x / 8);
                 fprintf(output, "\tWHILE 1: WEND\n\n");
             }
+            fprintf(output, "\t' Start tile = %d. Total_tiles = %d\n", start_tile, total_tiles);
             fprintf(output, "%s_char:\n", label);
-            generate_data(output, bit + start_tile * 8, total_tiles * 8, pletter, 0);
+            generate_data(output, bit + start_tile * 8, 8, total_tiles * 8, pletter, 0);
             fprintf(output, "\n");
             fprintf(output, "%s_color:\n", label);
-            generate_data(output, col + start_tile * 8, total_tiles * 8, pletter, 1);
+            generate_data(output, col + start_tile * 8, 8, total_tiles * 8, pletter, 1);
             fprintf(output, "\n");
+            fprintf(output, "\t' Width = %d, height = %d\n", size_x / 8, size_y / 8);
             fprintf(output, "%s_pattern:\n", label);
-            generate_data(output, pattern, size_x / 8 * size_y / 8, 0, 1);
+            generate_data(output, pattern, size_x / 8, size_x / 8 * size_y / 8, 0, 1);
         } else {
             fprintf(output, "\t;\n");
             fprintf(output, "\t; Start tile = %d. Total_tiles = %d\n", start_tile, total_tiles);
-            fprintf(output, "\t; Width = %d, height = %d\n", size_x / 8, size_y / 8);
             fprintf(output, "\t;\n");
             fprintf(output, "%s_char:\n", label);
-            generate_db(output, bit + start_tile * 8, total_tiles * 8, pletter);
+            generate_db(output, bit + start_tile * 8, 8, total_tiles * 8, pletter);
             fprintf(output, "\n");
             fprintf(output, "%s_color:\n", label);
-            generate_db(output, col + start_tile * 8, total_tiles * 8, pletter);
+            generate_db(output, col + start_tile * 8, 8, total_tiles * 8, pletter);
             fprintf(output, "\n");
+            fprintf(output, "\t; Width = %d, height = %d\n", size_x / 8, size_y / 8);
             fprintf(output, "%s_pattern:\n", label);
-            generate_db(output, pattern, size_x / 8 * size_y / 8, 0);
+            generate_db(output, pattern, size_x / 8, size_x / 8 * size_y / 8, 0);
         }
     } else if (sprite_mode) {
         unsigned char *final_bitmap;
@@ -1404,12 +1408,12 @@ hack:
                 fprintf(output, "\t' DEFINE SPRITE %s%d,%d,%s\n", pletter ? "PLETTER " : "", 0, size_y / 16 * (size_x / 16), label);
                 fprintf(output, "\t'\n");
                 fprintf(output, "%s:\n", label);
-                generate_data(output, final_bitmap, p - final_bitmap, pletter, 1);
+                generate_data(output, final_bitmap, 8, p - final_bitmap, pletter, 1);
             }
         } else {
             fprintf(output, "\t; Total sprites: %d\n", size_y / 16 * (size_x / 16));
             fprintf(output, "%s:\n", label);
-            generate_db(output, final_bitmap, p - final_bitmap, pletter);
+            generate_db(output, final_bitmap, 8, p - final_bitmap, pletter);
         }
         free(final_bitmap);
     } else {
@@ -1436,22 +1440,22 @@ hack:
                 }
             }
             fprintf(output, "%s_bitmap:\n", label);
-            generate_data(output, bitmap, size_x * size_y / 8, pletter, 0);
+            generate_data(output, bitmap, 8, size_x * size_y / 8, pletter, 0);
             fprintf(output, "\n");
             fprintf(output, "%s_color:\n", label);
-            generate_data(output, color, size_x * size_y / 8, pletter, 1);
+            generate_data(output, color, 8, size_x * size_y / 8, pletter, 1);
         } else {
             fprintf(output, "%s_bitmap:\n", label);
-            generate_db(output, bitmap, size_x * size_y / 8, pletter);
+            generate_db(output, bitmap, 8, size_x * size_y / 8, pletter);
             fprintf(output, "\n");
             fprintf(output, "%s_color:\n", label);
-            generate_db(output, color, size_x * size_y / 8, pletter);
+            generate_db(output, color, 8, size_x * size_y / 8, pletter);
         }
     }
     if (magic_sprites) {
         if (cvbasic) {
             fprintf(output, "%s_sprites:\n", label);
-            generate_data(output, sprites, sig_sprite * 32, pletter, 1);
+            generate_data(output, sprites, 8, sig_sprite * 32, pletter, 1);
             fprintf(output, "\n");
             fprintf(output, "%s_show:\tPROCEDURE\n", label);
             if (sig_sprite) {
@@ -1464,10 +1468,10 @@ hack:
             fprintf(output, "\tEND\n");
         } else {
             fprintf(output, "%s_sprites:\n", label);
-            generate_db(output, sprites, sizeof(sprites), pletter);
+            generate_db(output, sprites, 8, sizeof(sprites), pletter);
             fprintf(output, "\n");
             fprintf(output, "%s_sprites_attr:\n", label);
-            generate_db(output, attr, sizeof(attr), pletter);
+            generate_db(output, attr, 4, sizeof(attr), pletter);
         }
     }
     fclose(output);
