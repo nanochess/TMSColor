@@ -23,6 +23,8 @@ Converts a BMP image to TMS9928 bitmap/color format.
     -e45d2 Replaces color 4 with 5 and d with 2 before processing.
     -fx    Flip image along the X-coordinate (mirror)
     -fy    Flip image along the Y-coordinate
+    -i     Generates BITMAP statements instead of DATA
+    -i2    Generates BITMAP statements using X and .
     -m     Generates magic sprites for areas with more than 2 colors
     -p1    Searches best color combination for photo (slow)
     -p2    Searches best color combination for photo (2x2 dither) (slow)

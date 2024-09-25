@@ -51,6 +51,7 @@ unsigned char attr[128];
 
 int size_x;                     /* Size X in pixels */
 int size_y;                     /* Size Y in pixels */
+int use_bitmap = 0;
 
 /*
  ** Use this palette in your paint program
@@ -401,26 +402,75 @@ void generate_db(FILE *output, unsigned char *data, int length, int compress)
 }
 
 /*
+ ** Converts a byte to a binary string
+ */
+char *binary(int data)
+{
+    static char string[9];
+    
+    if (use_bitmap == 2) {
+        string[0] = (data & 0x80) ? 'X' : '.';
+        string[1] = (data & 0x40) ? 'X' : '.';
+        string[2] = (data & 0x20) ? 'X' : '.';
+        string[3] = (data & 0x10) ? 'X' : '.';
+        string[4] = (data & 0x08) ? 'X' : '.';
+        string[5] = (data & 0x04) ? 'X' : '.';
+        string[6] = (data & 0x02) ? 'X' : '.';
+        string[7] = (data & 0x01) ? 'X' : '.';
+    } else {
+        string[0] = (data & 0x80) ? '1' : '0';
+        string[1] = (data & 0x40) ? '1' : '0';
+        string[2] = (data & 0x20) ? '1' : '0';
+        string[3] = (data & 0x10) ? '1' : '0';
+        string[4] = (data & 0x08) ? '1' : '0';
+        string[5] = (data & 0x04) ? '1' : '0';
+        string[6] = (data & 0x02) ? '1' : '0';
+        string[7] = (data & 0x01) ? '1' : '0';
+    }
+    string[8] = '\0';
+    return string;
+}
+
+/*
  ** Generate DATA data
  */
-void generate_data(FILE *output, unsigned char *data, int length, int compress)
+void generate_data(FILE *output, unsigned char *data, int length, int compress, int literal)
 {
     int c;
     
     if (compress) {
         pletter(data, length, &data, &length);
-    }
-    for (c = 0; c < length; c++) {
-        if ((c & 7) == 0)
-            fprintf(output, "\tDATA BYTE ");
-        else
-            fprintf(output, ",");
-        fprintf(output, "$%02x", data[c]);
-        if ((c & 7) == 7 || (c + 1) == length)
-            fprintf(output, "\n");
-    }
-    if (compress) {
+        for (c = 0; c < length; c++) {
+            if ((c & 7) == 0)
+                fprintf(output, "\tDATA BYTE ");
+            else
+                fprintf(output, ",");
+            fprintf(output, "$%02x", data[c]);
+            if ((c & 7) == 7 || (c + 1) == length)
+                fprintf(output, "\n");
+        }
         free(data);
+    } else if (use_bitmap && !literal) {
+        for (c = 0; c < length; c += 8) {
+            fprintf(output, "\tBITMAP \"%s\"\n", binary(data[c + 0]));
+            fprintf(output, "\tBITMAP \"%s\"\n", binary(data[c + 1]));
+            fprintf(output, "\tBITMAP \"%s\"\n", binary(data[c + 2]));
+            fprintf(output, "\tBITMAP \"%s\"\n", binary(data[c + 3]));
+            fprintf(output, "\tBITMAP \"%s\"\n", binary(data[c + 4]));
+            fprintf(output, "\tBITMAP \"%s\"\n", binary(data[c + 5]));
+            fprintf(output, "\tBITMAP \"%s\"\n", binary(data[c + 6]));
+            fprintf(output, "\tBITMAP \"%s\"\n\n", binary(data[c + 7]));
+        }
+    } else {
+        for (c = 0; c < length; c++) {
+            if ((c & 7) == 0)
+                fprintf(output, "\tDATA BYTE ");
+            else
+                fprintf(output, ",");
+            fprintf(output, "$%02x", data[c]);
+            if ((c & 7) == 7 || (c + 1) == length)
+                fprintf(output, "\n");
+        }
     }
 }
 
@@ -496,6 +546,8 @@ int main(int argc, char *argv[])
         fprintf(stderr, "    -e45d2 Replaces color 4 with 5 and d with 2 before processing.\n");
         fprintf(stderr, "    -fx    Flip image along the X-coordinate (mirror)\n");
         fprintf(stderr, "    -fy    Flip image along the Y-coordinate\n");
+        fprintf(stderr, "    -i     Generates BITMAP statements instead of DATA\n");
+        fprintf(stderr, "    -i2    Generates BITMAP statements using X and .\n");
         fprintf(stderr, "    -m     Generates magic sprites for areas with more than 2 colors\n");
         fprintf(stderr, "    -p1    Searches best color combination for photo (slow)\n");
         fprintf(stderr, "    -p2    Searches best color combination for photo (2x2 dither) (slow)\n");
@@ -575,6 +627,13 @@ int main(int argc, char *argv[])
                 output_file = argv[++arg];
         } else if (c == 'd') {  /* -d */
             direct = 1;
+        } else if (c == 'i') {  /* -i Use BITMAP instead of DATA (CVBasic) */
+            if (argv[arg][2])
+                use_bitmap = atoi(argv[arg] + 2);
+            else
+                use_bitmap = 1;
+            if (use_bitmap == 0)
+                use_bitmap = 1;
         } else {
             bad = 1;
         }
@@ -660,7 +719,7 @@ int main(int argc, char *argv[])
         }
         fprintf(output, "%s:\n", label);
         if (cvbasic)
-            generate_data(output, bitmap, p - bitmap, pletter);
+            generate_data(output, bitmap, p - bitmap, pletter, 1);
         else
             generate_db(output, bitmap, p - bitmap, pletter);
         fclose(output);
@@ -1267,13 +1326,13 @@ hack:
                 fprintf(output, "\tWHILE 1: WEND\n\n");
             }
             fprintf(output, "%s_char:\n", label);
-            generate_data(output, bit + start_tile * 8, total_tiles * 8, pletter);
+            generate_data(output, bit + start_tile * 8, total_tiles * 8, pletter, 0);
             fprintf(output, "\n");
             fprintf(output, "%s_color:\n", label);
-            generate_data(output, col + start_tile * 8, total_tiles * 8, pletter);
+            generate_data(output, col + start_tile * 8, total_tiles * 8, pletter, 1);
             fprintf(output, "\n");
             fprintf(output, "%s_pattern:\n", label);
-            generate_data(output, pattern, size_x / 8 * size_y / 8, 0);
+            generate_data(output, pattern, size_x / 8 * size_y / 8, 0, 1);
         } else {
             fprintf(output, "\t;\n");
             fprintf(output, "\t; Start tile = %d. Total_tiles = %d\n", start_tile, total_tiles);
@@ -1345,7 +1404,7 @@ hack:
                 fprintf(output, "\t' DEFINE SPRITE %s%d,%d,%s\n", pletter ? "PLETTER " : "", 0, size_y / 16 * (size_x / 16), label);
                 fprintf(output, "\t'\n");
                 fprintf(output, "%s:\n", label);
-                generate_data(output, final_bitmap, p - final_bitmap, pletter);
+                generate_data(output, final_bitmap, p - final_bitmap, pletter, 1);
             }
         } else {
             fprintf(output, "\t; Total sprites: %d\n", size_y / 16 * (size_x / 16));
@@ -1377,10 +1436,10 @@ hack:
                 }
             }
             fprintf(output, "%s_bitmap:\n", label);
-            generate_data(output, bitmap, size_x * size_y / 8, pletter);
+            generate_data(output, bitmap, size_x * size_y / 8, pletter, 0);
             fprintf(output, "\n");
             fprintf(output, "%s_color:\n", label);
-            generate_data(output, color, size_x * size_y / 8, pletter);
+            generate_data(output, color, size_x * size_y / 8, pletter, 1);
         } else {
             fprintf(output, "%s_bitmap:\n", label);
             generate_db(output, bitmap, size_x * size_y / 8, pletter);
@@ -1392,7 +1451,7 @@ hack:
     if (magic_sprites) {
         if (cvbasic) {
             fprintf(output, "%s_sprites:\n", label);
-            generate_data(output, sprites, sig_sprite * 32, pletter);
+            generate_data(output, sprites, sig_sprite * 32, pletter, 1);
             fprintf(output, "\n");
             fprintf(output, "%s_show:\tPROCEDURE\n", label);
             if (sig_sprite) {
