@@ -2,12 +2,11 @@
 # by Oscar Toledo G.
 # https://github.com/nanochess/tmscolor
 #
-build:
-	@cc tmscolor.c pletter.c -lm -o tmscolor
+build: tmscolor.o pletter.o
+	@$(CC) tmscolor.o pletter.o -lm -o tmscolor
 
 clean:
-	@rm tmscolor
+	@rm tmscolor.o pletter.o tmscolor
 
 love:
 	@echo "...not war"
-
