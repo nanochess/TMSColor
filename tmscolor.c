@@ -1317,6 +1317,8 @@ hack:
                 fprintf(output, "\t' MODE 0\n");
                 fprintf(output, "\t' DEFINE CHAR %s%d,%d,%s_char\n", pletter ? "PLETTER " : "", start_tile, total_tiles, label);
                 fprintf(output, "\t' DEFINE COLOR %s%d,%d,%s_color\n", pletter ? "PLETTER " : "", start_tile, total_tiles, label);
+                if (magic_sprites)
+                    fprintf(output, "\t' GOSUB %s_show\n", label);
                 fprintf(output, "\t' SCREEN %s_pattern,0,0,%d,%d,%d\n", label, size_x / 8, size_y / 8, size_x / 8);
                 fprintf(output, "\t'\n");
             } else {
@@ -1324,6 +1326,8 @@ hack:
                 fprintf(output, "\tMODE 0\n");
                 fprintf(output, "\tDEFINE CHAR %s%d,%d,%s_char\n", pletter ? "PLETTER " : "", start_tile, total_tiles, label);
                 fprintf(output, "\tDEFINE COLOR %s%d,%d,%s_color\n", pletter ? "PLETTER " : "", start_tile, total_tiles, label);
+                if (magic_sprites)
+                    fprintf(output, "\tGOSUB %s_show\n", label);
                 fprintf(output, "\tSCREEN %s_pattern,0,0,%d,%d,%d\n", label, size_x / 8, size_y / 8, size_x / 8);
                 fprintf(output, "\tWHILE 1: WEND\n\n");
             }
