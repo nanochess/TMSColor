@@ -904,7 +904,37 @@ int main(int argc, char *argv[])
         /*
          ** If asked for photo quality...
          */
-        if (photo) {
+        if (photo && sms_mode) {
+            double g;
+            double best_difference;
+            
+            /*
+             ** Normal image
+             */
+            for (x = 0; x < size_x; x++) {
+                int best_color;
+                int best_difference;
+                
+                if (bmp_format == 8) {            /* 256 color */
+                    fread(buffer, 1, 1, a);
+                    memcpy(buffer, buffer + 54 + buffer[0] * 4, 4);
+                } else if (bmp_format == 24) {    /* 24 bits */
+                    fread(buffer, 1, 3, a);
+                } else {                            /* 32 bits */
+                    fread(buffer, 1, 4, a);
+                }
+                best_color = 0;
+                best_difference = 1e38;
+                for (c = 0; c < 16; c++) {
+                    g = comparison(&buffer[0], &colors[c * 3 + 0]);
+                    if (g < best_difference) {
+                        best_difference = g;
+                        best_color = c;
+                    }
+                }
+                source[(flip_y ? size_y - 1 - y : y) * size_x + (flip_x ? size_x - 1 - x : x)] = best_color;
+            }
+        } else if (photo) {
             int best_combo;
             double best_combo_difference;
             int best_combo_dither;
