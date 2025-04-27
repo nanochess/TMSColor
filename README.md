@@ -1,8 +1,8 @@
 # TMSColor v2.4
-*(c) Copyright 2009-2024 Óscar Toledo Gutiérrez*
+*(c) Copyright 2009-2025 Óscar Toledo Gutiérrez*
 *https://nanochess.org/*
 
-Converts a BMP image to TMS9928 bitmap/color format.
+Converts a BMP image to TMS9928 bitmap/color format or Sega Master System format.
 
     tmscolor.c              TMSColor C language source code.
     vdp_colors.bmp          A reference of VDP colors to use in your images.
@@ -14,6 +14,7 @@ Converts a BMP image to TMS9928 bitmap/color format.
 
     tmscolor [options] image.bmp image.asm [label]
     
+    -sms   Generates Sega Master System format.
     -b     Generates CVBasic source code.
     -n     Removes CVBasic stub code for displaying.
     -s     Process tiles in chunks of 16 pixels high (sprites).
@@ -43,10 +44,12 @@ Or for CVBasic:
     
 Photos will look better if the contrast is good. Magic sprites will work only with an image of 256x192 pixels.
 
+Currently for Sega Master System you should use the standard VDP colors, and you can provide your palette inside your game or program (for example, using the PALETTE LOAD sentence of CVBasic). It is way easier than trying to calculate a palette inside TMSColor.
+
 
 ### Notes
 
-The current official version is v2.4
+The current official version is v3.0
 
 CVBasic is available from https://github.com/nanochess/CVBasic
 
