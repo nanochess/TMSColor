@@ -1,5 +1,4 @@
 .DS_Store
 tmscolor
-pletter.o
-tmscolor.o
+*.o
 
