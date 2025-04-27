@@ -1,4 +1,4 @@
-# TMSColor v2.4
+# TMSColor v3.0
 *(c) Copyright 2009-2025 Óscar Toledo Gutiérrez*
 *https://nanochess.org/*
 
