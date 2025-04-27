@@ -906,14 +906,13 @@ int main(int argc, char *argv[])
          */
         if (photo && sms_mode) {
             double g;
-            double best_difference;
             
             /*
              ** Normal image
              */
             for (x = 0; x < size_x; x++) {
                 int best_color;
-                int best_difference;
+                double best_difference;
                 
                 if (bmp_format == 8) {            /* 256 color */
                     fread(buffer, 1, 1, a);
