@@ -1477,7 +1477,7 @@ hack:
                     fprintf(output, "\t'\n");
                 } else {
                     fprintf(output, "\t' Display image.\n");
-                    fprintf(output, "\tMODE 0\n");
+                    fprintf(output, "\tMODE 4\n");
                     fprintf(output, "\tDEFINE CHAR %s%d,%d,%s_char\n", pletter ? "PLETTER " : "", start_tile, total_tiles, label);
                     fprintf(output, "\tSCREEN %s_pattern,0,0,%d,%d,%d\n", label, size_x / 8, size_y / 8, size_x / 8);
                     fprintf(output, "\tWHILE 1: WEND\n\n");
