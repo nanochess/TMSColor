@@ -620,7 +620,7 @@ int main(int argc, char *argv[])
     actual = time(0);
     date = localtime(&actual);
     if (argc < 3) {
-        fprintf(stderr, "\nTMSColor: Converter from BMP to TMS9928 format\n");
+        fprintf(stderr, "\nTMSColor: Converter from BMP/PNG to TMS9928 format\n");
         fprintf(stderr, VERSION "  by Oscar Toledo G. http://nanochess.org\n");
         fprintf(stderr, "\n");
         fprintf(stderr, "Usage:\n\n");
@@ -893,16 +893,6 @@ int main(int argc, char *argv[])
             size_y = -size_y;
             n = 1;
         }
-        if ((size_x & 7) != 0) {
-            fprintf(stderr, "Error: The input file doesn't measure a multiple of 8 in X size (it's %d pixels)\n", size_x);
-            fclose(a);
-            exit(3);
-        }
-        if ((size_y & 7) != 0) {
-            fprintf(stderr, "Error: The input file doesn't measure a multiple of 8 in Y size (it's %d pixels)\n", size_y);
-            fclose(a);
-            exit(3);
-        }
         if (size_x == 0 || size_y == 0) {
             fprintf(stderr, "Error: There's a weird BMP file in the input. I'm scared...\n");
             fclose(a);
@@ -943,7 +933,15 @@ int main(int argc, char *argv[])
         }
         arg++;
     }
-    
+    if ((size_x & 7) != 0) {
+        fprintf(stderr, "Error: The input file doesn't measure a multiple of 8 in X size (it's %d pixels)\n", size_x);
+        exit(3);
+    }
+    if ((size_y & 7) != 0) {
+        fprintf(stderr, "Error: The input file doesn't measure a multiple of 8 in Y size (it's %d pixels)\n", size_y);
+        exit(3);
+    }
+
     if (sms_mode) {
         bitmap = malloc(size_x * size_y / 2);
         color = NULL;
