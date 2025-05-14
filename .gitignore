@@ -1,3 +1,5 @@
 .DS_Store
-*.o
+tmscolor.o
+pletter.o
+lodepng.o
 tmscolor

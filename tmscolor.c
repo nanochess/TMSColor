@@ -1837,4 +1837,5 @@ hack:
     }
     fclose(output);
     free(image);
+    return 0;
 }
