@@ -31,12 +31,17 @@
 #include <time.h>
 #include <limits.h>
 #include <math.h>
+#include "lodepng.h"
 
-#define VERSION "3.0 Apr/27/2025"     /* Software version */
+#define VERSION "3.1 May/14/2025"     /* Software version */
 
 #define ROUND8(x)  ((x + 7) & ~7)
 
 extern void pletter(unsigned char *, int, unsigned char **, int *);
+
+unsigned char *image;           /* Image data in RGB format */
+int size_x;                     /* Size X in pixels */
+int size_y;                     /* Size Y in pixels */
 
 unsigned char *bitmap;
 unsigned char *color;
@@ -49,8 +54,6 @@ unsigned char usage[24][32][32];
 unsigned char sprites[2048];
 unsigned char attr[128];
 
-int size_x;                     /* Size X in pixels */
-int size_y;                     /* Size Y in pixels */
 int use_bitmap = 0;
 int sms_mode = 0;
 
@@ -566,6 +569,7 @@ int main(int argc, char *argv[])
 {
     FILE *a;
     FILE *output;
+    char *p;
     int x;
     int y;
     int c;
@@ -591,6 +595,7 @@ int main(int argc, char *argv[])
     int triple_color;
     int inline_sprites[192];
     
+    int png_file;
     int bmp_format;
     
     int arg;
@@ -622,6 +627,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "    tmscolor [options] image.bmp image.asm [label]\n");
         fprintf(stderr, "        Creates image for use with assembler code\n\n");
         fprintf(stderr, "    -sms   Sega Master System mode.\n");
+        fprintf(stderr, "           Allows up to 448 tiles using -t\n");
         fprintf(stderr, "    -b     Generates CVBasic source code.\n");
         fprintf(stderr, "    -n     Removes CVBasic stub code for displaying.\n");
         fprintf(stderr, "    -z     Output file is compressed with Pletter.\n");
@@ -699,7 +705,7 @@ int main(int argc, char *argv[])
                 photo = 2;
             else
                 bad = 1;
-        } else if (c == 't') {  /* -t Tiled, -t01 Tiled start at 01 */
+        } else if (c == 't') {  /* -t Tiled, -t1 Tiles start at 1 */
             char *ap1 = &argv[arg][2];
             
             if (isdigit(ap1[0])) {
@@ -728,152 +734,216 @@ int main(int argc, char *argv[])
             bad = 1;
         }
         if (bad)
-            fprintf(stderr, "Bad option: %s\n", argv[arg]);
+            fprintf(stderr, "Error: Bad option %s\n", argv[arg]);
         arg++;
     }
     if (arg >= argc) {
-        fprintf(stderr, "Missing input file name\n");
+        fprintf(stderr, "Error: Missing input file name\n");
         exit(2);
     }
-    if (sms_mode && magic_sprites) {
-        fprintf(stderr, "Warning: Sega Master System mode doesn't require magic sprites\n");
-        magic_sprites = 0;
+    if (sms_mode) {
+        if (magic_sprites) {
+            fprintf(stderr, "Warning: Sega Master System mode doesn't require magic sprites\n");
+            magic_sprites = 0;
+        }
+        if (start_tile < 0) {
+            fprintf(stderr, "Warning: Negative start tile, using 0\n");
+            start_tile = 0;
+        }
+        if (start_tile > 447) {
+            fprintf(stderr, "Warning: Out of range start tile, using 447\n");
+            start_tile = 447;
+        }
+    } else {
+        if (start_tile < 0) {
+            fprintf(stderr, "Warning: Negative start tile, using 0\n");
+            start_tile = 0;
+        }
+        if (start_tile > 255) {
+            fprintf(stderr, "Warning: Out of range start tile, using 255\n");
+            start_tile = 255;
+        }
     }
+    /* Generate flip bit table */
     for (c = 0; c < 256; c++) {
         flip_bits[c] = ((c & 0x80) >> 7) | ((c & 0x40) >> 5) | ((c & 0x20) >> 3) | ((c & 0x10) >> 1) | ((c & 0x08) << 1) | ((c & 0x04) >> 3) | ((c & 0x02) >> 5) | ((c & 0x01) << 7);
     }
     fprintf(stdout, "Processing: %s\n", argv[arg]);
-    a = fopen(argv[arg], "rb");
-    arg++;
-    if (a == NULL) {
-        fprintf(stderr, "Missing input file\n");
-        exit(2);
+    png_file = 0;
+    if (!direct && strlen(argv[arg]) > 4) {
+        p = argv[arg] + strlen(argv[arg]);
+        if (p[-4] == '.' && tolower(p[-3]) == 'p' && tolower(p[-2]) == 'n' && tolower(p[-1]) == 'g') {
+            png_file = 1;
+        }
     }
-    
-    /*
-     ** Direct filter (for converting binary files or compressing binary files)
-     */
-    if (direct) {
-        unsigned char *p;
-        
-        fseek(a, 0, SEEK_END);
-        c = ftell(a);
-        fseek(a, 0, SEEK_SET);
-        bitmap = malloc(c);
-        if (bitmap == NULL) {
-            fprintf(stderr, "Not enough memory to read file\n");
-            exit(2);
-        }
-        fread(bitmap, 1, c, a);
-        p = bitmap + c;
-        fclose(a);
-        if (arg >= argc) {
-            fprintf(stderr, "Missing output file name\n");
-            free(bitmap);
-            exit(2);
-        }
-        output = fopen(argv[arg], "wb");
-        if (output == NULL) {
-            fprintf(stderr, "Couldn't open output file '%s'\n", argv[arg]);
-            free(bitmap);
-            exit(2);
-        }
+    if (png_file == 0) {
+        a = fopen(argv[arg], "rb");
         arg++;
-        if (arg < argc) {
-            label = argv[arg];
-        } else {
-            label = "binary";
+        if (a == NULL) {
+            fprintf(stderr, "Error: Missing input file\n");
+            exit(2);
         }
-        if (cvbasic) {
-            fprintf(a, "\t' TMSColor " VERSION "\n");
-            fprintf(a, "\t' Command: ");
-            for (c = 0; c < argc; c++) {
-                char *b;
-                
-                b = strchr(argv[c], ' ');
-                if (b != NULL)
-                    fprintf(a, "\"%s\" ", argv[c]);
-                else
-                    fprintf(a, "%s ", argv[c]);
+        
+        /*
+         ** Direct filter (for converting binary files or compressing binary files)
+         */
+        if (direct) {
+            unsigned char *p;
+            
+            fseek(a, 0, SEEK_END);
+            c = ftell(a);
+            fseek(a, 0, SEEK_SET);
+            bitmap = malloc(c);
+            if (bitmap == NULL) {
+                fprintf(stderr, "Error: Not enough memory to read file\n");
+                exit(2);
             }
-            fprintf(a, "\n");
-            fprintf(a, "\t' Created: %s\n", asctime(date));
-        } else {
-            fprintf(a, "\t; TMSColor " VERSION "\n");
-            fprintf(a, "\t; Command: ");
-            for (c = 0; c < argc; c++) {
-                char *b;
-                
-                b = strchr(argv[c], ' ');
-                if (b != NULL)
-                    fprintf(a, "\"%s\" ", argv[c]);
-                else
-                    fprintf(a, "%s ", argv[c]);
+            fread(bitmap, 1, c, a);
+            p = bitmap + c;
+            fclose(a);
+            if (arg >= argc) {
+                fprintf(stderr, "Error: Missing output file name\n");
+                free(bitmap);
+                exit(2);
             }
-            fprintf(a, "\n");
-            fprintf(a, "\t; Created: %s\n", asctime(date));
+            output = fopen(argv[arg], "w");
+            if (output == NULL) {
+                fprintf(stderr, "Error: Couldn't open output file '%s'\n", argv[arg]);
+                free(bitmap);
+                exit(2);
+            }
+            arg++;
+            if (arg < argc) {
+                label = argv[arg];
+            } else {
+                label = "binary";
+            }
+            if (cvbasic) {
+                fprintf(output, "\t' TMSColor " VERSION "\n");
+                fprintf(output, "\t' Command: ");
+                for (c = 0; c < argc; c++) {
+                    char *b;
+                    
+                    b = strchr(argv[c], ' ');
+                    if (b != NULL)
+                        fprintf(output, "\"%s\" ", argv[c]);
+                    else
+                        fprintf(output, "%s ", argv[c]);
+                }
+                fprintf(output, "\n");
+                fprintf(output, "\t' Created: %s\n", asctime(date));
+            } else {
+                fprintf(output, "\t; TMSColor " VERSION "\n");
+                fprintf(output, "\t; Command: ");
+                for (c = 0; c < argc; c++) {
+                    char *b;
+                    
+                    b = strchr(argv[c], ' ');
+                    if (b != NULL)
+                        fprintf(output, "\"%s\" ", argv[c]);
+                    else
+                        fprintf(output, "%s ", argv[c]);
+                }
+                fprintf(output, "\n");
+                fprintf(output, "\t; Created: %s\n", asctime(date));
+            }
+            fprintf(output, "%s:\n", label);
+            if (cvbasic)
+                generate_data(output, bitmap, 8, p - bitmap, pletter, 1);
+            else
+                generate_db(output, bitmap, 8, p - bitmap, pletter);
+            fclose(output);
+            exit(0);
         }
-        fprintf(output, "%s:\n", label);
-        if (cvbasic)
-            generate_data(output, bitmap, 8, p - bitmap, pletter, 1);
-        else
-            generate_db(output, bitmap, 8, p - bitmap, pletter);
-        fclose(output);
-        exit(0);
-    }
-    
-    /*
-     ** Read the BMP file
-     */
-    fread(buffer, 1, 54 + 1024, a);
-    if (buffer[0] != 'B' || buffer[1] != 'M') {
-        fprintf(stderr, "The input file is not in BMP format\n");
-        fclose(a);
-        exit(3);
-    }
-    bmp_format = buffer[0x1c];
-    if (bmp_format != 8 && bmp_format != 24 && bmp_format != 32) {
-        fprintf(stderr, "The input file is in %d bits format (not 8/24/32)\n", bmp_format);
-        fclose(a);
-        exit(3);
-    }
-    if (bmp_format == 8) {
-        if (buffer[0x2e] != 0 || (buffer[0x2f] != 0 && buffer[0x2f] != 1)) {
-            fprintf(stderr, "Unsupported palette for 8 bits format\n");
+        
+        /*
+         ** Read the BMP file
+         */
+        fread(buffer, 1, 54 + 1024, a);
+        if (buffer[0] != 'B' || buffer[1] != 'M') {
+            fprintf(stderr, "Error: The input file is not in BMP format\n");
             fclose(a);
             exit(3);
         }
-    }
-    if (buffer[0x1e] != 0 || buffer[0x1f] != 0 || buffer[0x20] != 0 || buffer[0x21] != 0) {
-        fprintf(stderr, "Cannot handle compressed input files (codec 0x%08x)\n", (buffer[0x21] << 24) | (buffer[0x20] << 16) | (buffer[0x1f] << 8) | (buffer[0x1e]));
+        bmp_format = buffer[0x1c];
+        if (bmp_format != 8 && bmp_format != 24 && bmp_format != 32) {
+            fprintf(stderr, "Error: The input file is in %d bits format (not 8/24/32)\n", bmp_format);
+            fclose(a);
+            exit(3);
+        }
+        if (bmp_format == 8) {
+            if (buffer[0x2e] != 0 || (buffer[0x2f] != 0 && buffer[0x2f] != 1)) {
+                fprintf(stderr, "Error: Unsupported palette for 8 bits format\n");
+                fclose(a);
+                exit(3);
+            }
+        }
+        if (buffer[0x1e] != 0 || buffer[0x1f] != 0 || buffer[0x20] != 0 || buffer[0x21] != 0) {
+            fprintf(stderr, "Error: Cannot handle compressed input files (codec 0x%08x)\n", (buffer[0x21] << 24) | (buffer[0x20] << 16) | (buffer[0x1f] << 8) | (buffer[0x1e]));
+            fclose(a);
+            exit(3);
+        }
+        size_x = buffer[0x12] | (buffer[0x13] << 8);
+        size_y = buffer[0x16] | (buffer[0x17] << 8);
+        if (size_y >= 32768)
+            size_y -= 65536;
+        if (size_y >= 0) {
+            n = 0;
+        } else {
+            size_y = -size_y;
+            n = 1;
+        }
+        if ((size_x & 7) != 0) {
+            fprintf(stderr, "Error: The input file doesn't measure a multiple of 8 in X size (it's %d pixels)\n", size_x);
+            fclose(a);
+            exit(3);
+        }
+        if ((size_y & 7) != 0) {
+            fprintf(stderr, "Error: The input file doesn't measure a multiple of 8 in Y size (it's %d pixels)\n", size_y);
+            fclose(a);
+            exit(3);
+        }
+        if (size_x == 0 || size_y == 0) {
+            fprintf(stderr, "Error: There's a weird BMP file in the input. I'm scared...\n");
+            fclose(a);
+            exit(3);
+        }
+        image = malloc(size_x * size_y * 3);
+        if (image == NULL) {
+            fprintf(stderr, "Error: Couldn't allocate memory for image\n");
+            fclose(a);
+            exit(3);
+        }
+        /* Read image and normalize as 24-bit RGB */
+        fseek(a, buffer[10] | (buffer[11] << 8) | (buffer[12] << 16) | (buffer[13] << 24), SEEK_SET);
+        for (y = n ? 0 : size_y - 1; n ? y < size_y : y >= 0; n ? y++ : y--) {
+            for (x = 0; x < size_x; x++) {
+                if (bmp_format == 8) {            /* 256 color */
+                    fread(buffer, 1, 1, a);
+                    memcpy(buffer, buffer + 54 + buffer[0] * 4, 4);
+                } else if (bmp_format == 24) {    /* 24 bits */
+                    fread(buffer, 1, 3, a);
+                } else {                            /* 32 bits */
+                    fread(buffer, 1, 4, a);
+                }
+                image[(y * size_x + x) * 3 + 0] = buffer[2];
+                image[(y * size_x + x) * 3 + 1] = buffer[1];
+                image[(y * size_x + x) * 3 + 2] = buffer[0];
+            }
+        }
         fclose(a);
-        exit(3);
-    }
-    size_x = buffer[0x12] | (buffer[0x13] << 8);
-    size_y = buffer[0x16] | (buffer[0x17] << 8);
-    if (size_y >= 32768)
-        size_y -= 65536;
-    if (size_y >= 0) {
-        n = 0;
     } else {
-        size_y = -size_y;
-        n = 1;
+        image = NULL;
+        size_x = 0;
+        size_y = 0;
+        c = lodepng_decode24_file(&image, (unsigned *) &size_x, (unsigned *) &size_y, argv[arg]);
+        if (c) {
+            fprintf(stderr, "Error: %s\n", lodepng_error_text(c));
+            exit(2);
+        }
+        arg++;
     }
-    if ((size_x & 7) != 0) {
-        fprintf(stderr, "The input file doesn't measure a multiple of 8 in X size (it's %d pixels)\n", size_x);
-        fclose(a);
-        exit(3);
-    }
-    if ((size_y & 7) != 0) {
-        fprintf(stderr, "The input file doesn't measure a multiple of 8 in Y size (it's %d pixels)\n", size_y);
-        fclose(a);
-        exit(3);
-    }
-    if (size_x == 0 || size_y == 0) {
-        fprintf(stderr, "There's a weird BMP file in the input. I'm scared...\n");
-        fclose(a);
-        exit(3);
-    }
+    
     if (sms_mode) {
         bitmap = malloc(size_x * size_y / 2);
         color = NULL;
@@ -883,7 +953,7 @@ int main(int argc, char *argv[])
         color = malloc(size_x * size_y / 8);
         pattern = malloc((size_x + 7) / 8 * size_y / 8);
         if (color == NULL) {
-            fprintf(stderr, "Unable to allocate memory for color data\n");
+            fprintf(stderr, "Error: Unable to allocate memory for color data\n");
             fclose(a);
             exit(3);
         }
@@ -892,14 +962,11 @@ int main(int argc, char *argv[])
     source2 = malloc(size_x * size_y);
     ignore = malloc(size_x * size_y);
     if (bitmap == NULL || pattern == NULL || source == NULL || source2 == NULL || ignore == NULL) {
-        fprintf(stderr, "Unable to allocate memory for bitmap\n");
+        fprintf(stderr, "Error: Unable to allocate memory for bitmap\n");
         fclose(a);
         exit(3);
     }
-    
-    /* Read image and approximate any color to the local palette */
-    fseek(a, buffer[10] | (buffer[11] << 8) | (buffer[12] << 16) | (buffer[13] << 24), SEEK_SET);
-    for (y = n ? 0 : size_y - 1; n ? y < size_y : y >= 0; n ? y++ : y--) {
+    for (y = 0; y < size_y; y++) {
         
         /*
          ** If asked for photo quality...
@@ -914,14 +981,9 @@ int main(int argc, char *argv[])
                 int best_color;
                 double best_difference;
                 
-                if (bmp_format == 8) {            /* 256 color */
-                    fread(buffer, 1, 1, a);
-                    memcpy(buffer, buffer + 54 + buffer[0] * 4, 4);
-                } else if (bmp_format == 24) {    /* 24 bits */
-                    fread(buffer, 1, 3, a);
-                } else {                            /* 32 bits */
-                    fread(buffer, 1, 4, a);
-                }
+                buffer[0] = image[(y * size_x + x) * 3 + 2];
+                buffer[1] = image[(y * size_x + x) * 3 + 1];
+                buffer[2] = image[(y * size_x + x) * 3 + 0];
                 best_color = 0;
                 best_difference = 1e38;
                 for (c = 0; c < 16; c++) {
@@ -944,16 +1006,9 @@ int main(int argc, char *argv[])
             double b;
             
             for (x = 0; x < size_x; ) {
-                if (bmp_format == 8) {            /* 256 color */
-                    fread(buffer, 1, 8, a);
-                    for (c = 7; c >= 0; c--)
-                        memcpy(buffer + c * 4, buffer + 54 + buffer[c] * 4, 4);
-                } else if (bmp_format == 24) {    /* 24 bits */
-                    for (c = 0; c < 8; c++)
-                        fread(buffer + c * 4, 1, 3, a);
-                } else {                            /* 32 bits */
-                    fread(buffer, 1, 32, a);
-                }
+                buffer[0] = image[(y * size_x + x) * 3 + 2];
+                buffer[1] = image[(y * size_x + x) * 3 + 1];
+                buffer[2] = image[(y * size_x + x) * 3 + 0];
                 best_combo_difference = 1e38;
                 
                 /*
@@ -1041,14 +1096,9 @@ int main(int argc, char *argv[])
                 int best_color;
                 int best_difference;
                 
-                if (bmp_format == 8) {            /* 256 color */
-                    fread(buffer, 1, 1, a);
-                    memcpy(buffer, buffer + 54 + buffer[0] * 4, 4);
-                } else if (bmp_format == 24) {    /* 24 bits */
-                    fread(buffer, 1, 3, a);
-                } else {                            /* 32 bits */
-                    fread(buffer, 1, 4, a);
-                }
+                buffer[0] = image[(y * size_x + x) * 3 + 2];
+                buffer[1] = image[(y * size_x + x) * 3 + 1];
+                buffer[2] = image[(y * size_x + x) * 3 + 0];
                 best_color = 0;
                 best_difference = 100000;
                 for (c = 0; c < 16; c++) {
@@ -1070,8 +1120,7 @@ int main(int argc, char *argv[])
             }
         }
     }
-    fclose(a);
-    
+
     if (size_x == 256 && size_y == 192 && magic_sprites == 1) {
         memset(inline_sprites, 0, sizeof(inline_sprites));
         memset(sprites, 0, sizeof(sprites));
@@ -1178,7 +1227,7 @@ int main(int argc, char *argv[])
                         b++;
                     }
                     if (sig_sprite >= 32) {
-                        fprintf(stderr, "More than 32 sprites\n");
+                        fprintf(stderr, "Error: More than 32 sprites\n");
                         goto hack;
                     }
                     y1 = c;
@@ -1300,7 +1349,7 @@ hack:
                     } else if (color2 == -1) {
                         color2 = source[c * size_x + d + e];
                     } else {
-                        fprintf(stderr, "More than 2 colors in stripe %d,%d (found %d with %d and %d already)\n", d, c, source[c * size_x + d + e], color1, color2);
+                        fprintf(stderr, "Error: More than 2 colors in stripe %d,%d (found %d with %d and %d already)\n", d, c, source[c * size_x + d + e], color1, color2);
                         for (e = 0; e < 8; e++)
                             source[c * size_x + d + e] |= 0x10;
                         break;
@@ -1341,7 +1390,7 @@ hack:
         
         a = fopen(output_file, "wb");
         if (a == NULL) {
-            fprintf(stderr, "Unable to write output file \"%s\"\n", output_file);
+            fprintf(stderr, "Error: Unable to write output file \"%s\"\n", output_file);
         } else {
             char header[54];
             
@@ -1397,14 +1446,14 @@ hack:
      ** Proceed to open the final output file.
      */
     if (arg >= argc) {
-        fprintf(stderr, "Missing output file name\n");
+        fprintf(stderr, "Error: Missing output file name\n");
         free(bitmap);
         free(color);
         exit(2);
     }
-    output = fopen(argv[arg], "wb");
+    output = fopen(argv[arg], "w");
     if (output == NULL) {
-        fprintf(stderr, "Couldn't open output file '%s'\n", argv[arg]);
+        fprintf(stderr, "Error: Couldn't open output file '%s'\n", argv[arg]);
         free(bitmap);
         free(color);
         exit(2);
@@ -1415,38 +1464,38 @@ hack:
     } else {
         label = "image";
     }
-    
+
     /*
      ** Headers
      */
     if (cvbasic) {
-        fprintf(a, "\t' TMSColor " VERSION "\n");
-        fprintf(a, "\t' Command: ");
+        fprintf(output, "\t' TMSColor " VERSION "\n");
+        fprintf(output, "\t' Command: ");
         for (c = 0; c < argc; c++) {
             char *b;
             
             b = strchr(argv[c], ' ');
             if (b != NULL)
-                fprintf(a, "\"%s\" ", argv[c]);
+                fprintf(output, "\"%s\" ", argv[c]);
             else
-                fprintf(a, "%s ", argv[c]);
+                fprintf(output, "%s ", argv[c]);
         }
-        fprintf(a, "\n");
-        fprintf(a, "\t' Created: %s\n", asctime(date));
+        fprintf(output, "\n");
+        fprintf(output, "\t' Created: %s\n", asctime(date));
     } else {
-        fprintf(a, "\t; TMSColor " VERSION "\n");
-        fprintf(a, "\t; Command: ");
+        fprintf(output, "\t; TMSColor " VERSION "\n");
+        fprintf(output, "\t; Command: ");
         for (c = 0; c < argc; c++) {
             char *b;
             
             b = strchr(argv[c], ' ');
             if (b != NULL)
-                fprintf(a, "\"%s\" ", argv[c]);
+                fprintf(output, "\"%s\" ", argv[c]);
             else
-                fprintf(a, "%s ", argv[c]);
+                fprintf(output, "%s ", argv[c]);
         }
-        fprintf(a, "\n");
-        fprintf(a, "\t; Created: %s\n", asctime(date));
+        fprintf(output, "\n");
+        fprintf(output, "\t; Created: %s\n", asctime(date));
     }
     
     /*
@@ -1454,17 +1503,18 @@ hack:
      */
     if (tiled) {
         if (sms_mode) { /* Sega Master System */
-            static unsigned char bit[256 * 32];
+            static unsigned char bit[512 * 32];
             int start = start_tile;
             int current = start;
             int total_tiles;
             
+            current = start;
             memset(bit, 0, sizeof(bit));
             for (c = 0; c < size_x / 8 * size_y / 8; c++) {
                 int flags;
             
                 flags = 0;
-                for (e = start; e < (current > 256 ? 256 : current); e++) {
+                for (e = start; e < (current > 448 ? 448 : current); e++) {
                     if (memcmp(&bit[e * 32], &bitmap[c * 32], 32) == 0)
                         break;
                     if (check_flip_x(&bit[e * 32], &bitmap[c * 32])) {
@@ -1482,9 +1532,12 @@ hack:
                 }
                 if (e == current) {
                     if (current == 256) {
-                        fprintf(stderr, "Too many tiles at %d,%d\n", c % (size_x / 8), c / (size_x / 8));
+                        fprintf(stderr, "Warning: Tile 256 being used at %d,%d avoid if using sprites\n", c % (size_x / 8), c / (size_x / 8));
+                    }
+                    if (current == 448) {
+                        fprintf(stderr, "Error: More than 448 tiles required at %d,%d\n", c % (size_x / 8), c / (size_x / 8));
                         current++;
-                    } else if (current > 256) {
+                    } else if (current > 448) {
                         current++;
                     } else {
                         memcpy(&bit[e * 32], &bitmap[c * 32], 32);
@@ -1492,28 +1545,37 @@ hack:
                     }
                 }
                 pattern[c * 2 + 0] = e;
-                pattern[c * 2 + 1] = flags;
+                pattern[c * 2 + 1] = flags | ((e >> 8) & 1);
             }
             total_tiles = current - start;
             fprintf(stderr, "Total used tiles: %d ($%02x-$%02x)\n", total_tiles, start_tile, current - 1);
             if (cvbasic) {
-                if (remove_stub) {
-                    fprintf(output, "\t'\n");
-                    fprintf(output, "\t' Recommended code:\n");
-                    fprintf(output, "\t' MODE 4\n");
-                    fprintf(output, "\t' DEFINE CHAR %s%d,%d,%s_char\n", pletter ? "PLETTER " : "", start_tile, total_tiles, label);
-                    fprintf(output, "\t' SCREEN %s_pattern,0,0,%d,%d,%d\n", label, size_x / 8, size_y / 8, size_x / 8);
-                    fprintf(output, "\t'\n");
-                } else {
+                if (remove_stub)
+                    fprintf(output, "\t'\n\t' Recommended code:\n");
+                else
                     fprintf(output, "\t' Display image.\n");
-                    fprintf(output, "\tMODE 4\n");
-                    fprintf(output, "\tDEFINE CHAR %s%d,%d,%s_char\n", pletter ? "PLETTER " : "", start_tile, total_tiles, label);
-                    fprintf(output, "\tSCREEN %s_pattern,0,0,%d,%d,%d\n", label, size_x / 8, size_y / 8, size_x / 8);
-                    fprintf(output, "\tWHILE 1: WEND\n\n");
+                fprintf(output, "\t%sMODE 4\n", remove_stub ? "' " : "");
+                if (!pletter && total_tiles > 255) {
+                    fprintf(output, "\t%sDEFINE CHAR %s%d,%d,%s_char_0\n", remove_stub ? "' " : "", pletter ? "PLETTER " : "", start_tile, 255, label);
+                    fprintf(output, "\t%sDEFINE CHAR %s%d,%d,%s_char_1\n", remove_stub ? "' " : "", pletter ? "PLETTER " : "", start_tile, total_tiles - 255, label);
+                } else {
+                    fprintf(output, "\t%sDEFINE CHAR %s%d,%d,%s_char\n", remove_stub ? "' " : "", pletter ? "PLETTER " : "", start_tile, total_tiles, label);
                 }
+                fprintf(output, "\t%sSCREEN %s_pattern,0,0,%d,%d,%d\n", remove_stub ? "' " : "", label, size_x / 8, size_y / 8, size_x / 8);
+                if (remove_stub)
+                    fprintf(output, "\t'\n");
+                else
+                    fprintf(output, "\tWHILE 1: WEND\n\n");
                 fprintf(output, "\t' Start tile = %d. Total_tiles = %d\n", start_tile, total_tiles);
-                fprintf(output, "%s_char:\n", label);
-                generate_data(output, bit + start_tile * 32, 8, total_tiles * 32, pletter, 0);
+                if (!pletter && total_tiles > 255) {
+                    fprintf(output, "%s_char_0:\n", label);
+                    generate_data(output, bit + start_tile * 32, 8, 255 * 32, pletter, 0);
+                    fprintf(output, "%s_char_1:\n", label);
+                    generate_data(output, bit + (start_tile + 255) * 32, 8, (total_tiles - 255) * 32, pletter, 0);
+                } else {
+                    fprintf(output, "%s_char:\n", label);
+                    generate_data(output, bit + start_tile * 32, 8, total_tiles * 32, pletter, 0);
+                }
                 fprintf(output, "\n");
                 fprintf(output, "\t' Width = %d, height = %d\n", size_x / 8, size_y / 8);
                 fprintf(output, "%s_pattern:\n", label);
@@ -1546,7 +1608,7 @@ hack:
                 }
                 if (e == current) {
                     if (current == 256) {
-                        fprintf(stderr, "Too many tiles at %d,%d\n", c % (size_x / 8), c / (size_x / 8));
+                        fprintf(stderr, "Error: Too many tiles at %d,%d\n", c % (size_x / 8), c / (size_x / 8));
                         current++;
                     } else if (current > 256) {
                         current++;
@@ -1561,26 +1623,20 @@ hack:
             total_tiles = current - start;
             fprintf(stderr, "Total used tiles: %d ($%02x-$%02x)\n", total_tiles, start_tile, current - 1);
             if (cvbasic) {
-                if (remove_stub) {
-                    fprintf(output, "\t'\n");
-                    fprintf(output, "\t' Recommended code:\n");
-                    fprintf(output, "\t' MODE 0\n");
-                    fprintf(output, "\t' DEFINE CHAR %s%d,%d,%s_char\n", pletter ? "PLETTER " : "", start_tile, total_tiles, label);
-                    fprintf(output, "\t' DEFINE COLOR %s%d,%d,%s_color\n", pletter ? "PLETTER " : "", start_tile, total_tiles, label);
-                    if (magic_sprites)
-                        fprintf(output, "\t' GOSUB %s_show\n", label);
-                    fprintf(output, "\t' SCREEN %s_pattern,0,0,%d,%d,%d\n", label, size_x / 8, size_y / 8, size_x / 8);
-                    fprintf(output, "\t'\n");
-                } else {
+                if (remove_stub)
+                    fprintf(output, "\t'\n\t' Recommended code:\n");
+                else
                     fprintf(output, "\t' Display image.\n");
-                    fprintf(output, "\tMODE 0\n");
-                    fprintf(output, "\tDEFINE CHAR %s%d,%d,%s_char\n", pletter ? "PLETTER " : "", start_tile, total_tiles, label);
-                    fprintf(output, "\tDEFINE COLOR %s%d,%d,%s_color\n", pletter ? "PLETTER " : "", start_tile, total_tiles, label);
-                    if (magic_sprites)
-                        fprintf(output, "\tGOSUB %s_show\n", label);
-                    fprintf(output, "\tSCREEN %s_pattern,0,0,%d,%d,%d\n", label, size_x / 8, size_y / 8, size_x / 8);
+                fprintf(output, "\t%sMODE 0\n", remove_stub ? "' ": "");
+                fprintf(output, "\t%sDEFINE CHAR %s%d,%d,%s_char\n", remove_stub ? "' ": "", pletter ? "PLETTER " : "", start_tile, total_tiles, label);
+                fprintf(output, "\t%sDEFINE COLOR %s%d,%d,%s_color\n", remove_stub ? "' ": "", pletter ? "PLETTER " : "", start_tile, total_tiles, label);
+                if (magic_sprites)
+                    fprintf(output, "\t%sGOSUB %s_show\n", remove_stub ? "' ": "", label);
+                fprintf(output, "\t%sSCREEN %s_pattern,0,0,%d,%d,%d\n", remove_stub ? "' ": "", label, size_x / 8, size_y / 8, size_x / 8);
+                if (remove_stub)
+                    fprintf(output, "\t'\n");
+                else
                     fprintf(output, "\tWHILE 1: WEND\n\n");
-                }
                 fprintf(output, "\t' Start tile = %d. Total_tiles = %d\n", start_tile, total_tiles);
                 fprintf(output, "%s_char:\n", label);
                 generate_data(output, bit + start_tile * 8, 8, total_tiles * 8, pletter, 0);
@@ -1613,7 +1669,7 @@ hack:
             
             final_bitmap = malloc(size_y * size_x / 2);
             if (final_bitmap == NULL) {
-                fprintf(stderr, "Error trying to generate sprites\n");
+                fprintf(stderr, "Error: Unable to allocate memory to generate sprites\n");
                 exit(1);
             }
             p = final_bitmap;
@@ -1660,7 +1716,7 @@ hack:
             
             final_bitmap = malloc((size_y / 16) * (size_x / 8) * 16);
             if (final_bitmap == NULL) {
-                fprintf(stderr, "Error trying to generate sprites\n");
+                fprintf(stderr, "Error: Unable to allocate memory to generate sprites\n");
                 exit(1);
             }
             p = final_bitmap;
@@ -1727,25 +1783,17 @@ hack:
                 generate_data(output, bitmap, 8, size_x * size_y / 2, pletter, 0);
             } else {
                 if (size_x * size_y / 8 == 0x1800) {
-                    if (remove_stub) {
-                        fprintf(output, "\t' MODE 1\n");
-                        fprintf(output, "\t' SCREEN DISABLE\n");
-                        fprintf(output, "\t' DEFINE VRAM %s$0000,$1800,%s_bitmap\n", pletter ? "PLETTER " : "", label);
-                        fprintf(output, "\t' DEFINE VRAM %s$2000,$1800,%s_color\n", pletter ? "PLETTER " : "", label);
-                        if (magic_sprites)
-                            fprintf(output, "\t' GOSUB %s_show\n", label);
-                        fprintf(output, "\t' SCREEN ENABLE\n");
+                    fprintf(output, "\t%sMODE 1\n", remove_stub ? "' " : "");
+                    fprintf(output, "\t%sSCREEN DISABLE\n", remove_stub ? "' " : "");
+                    fprintf(output, "\t%sDEFINE VRAM %s$0000,$1800,%s_bitmap\n", remove_stub ? "' " : "", pletter ? "PLETTER " : "", label);
+                    fprintf(output, "\t%sDEFINE VRAM %s$2000,$1800,%s_color\n", remove_stub ? "' " : "", pletter ? "PLETTER " : "", label);
+                    if (magic_sprites)
+                        fprintf(output, "\t%sGOSUB %s_show\n", remove_stub ? "' " : "", label);
+                    fprintf(output, "\t%sSCREEN ENABLE\n", remove_stub ? "' " : "");
+                    if (remove_stub)
                         fprintf(output, "\n");
-                    } else {
-                        fprintf(output, "\tMODE 1\n");
-                        fprintf(output, "\tSCREEN DISABLE\n");
-                        fprintf(output, "\tDEFINE VRAM %s$0000,$1800,%s_bitmap\n", pletter ? "PLETTER " : "", label);
-                        fprintf(output, "\tDEFINE VRAM %s$2000,$1800,%s_color\n", pletter ? "PLETTER " : "", label);
-                        if (magic_sprites)
-                            fprintf(output, "\tGOSUB %s_show\n", label);
-                        fprintf(output, "\tSCREEN ENABLE\n");
+                    else
                         fprintf(output, "\tWHILE 1: WEND\n\n");
-                    }
                 }
                 fprintf(output, "%s_bitmap:\n", label);
                 generate_data(output, bitmap, 8, size_x * size_y / 8, pletter, 0);
@@ -1790,4 +1838,5 @@ hack:
         }
     }
     fclose(output);
+    free(image);
 }

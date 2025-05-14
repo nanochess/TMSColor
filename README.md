@@ -1,8 +1,8 @@
-# TMSColor v3.0
+# TMSColor v3.1
 *(c) Copyright 2009-2025 Óscar Toledo Gutiérrez*
 *https://nanochess.org/*
 
-Converts a BMP image to TMS9928 bitmap/color format or Sega Master System format.
+Converts a BMP/PNG image to TMS9928 bitmap/color format or Sega Master System format.
 
     tmscolor.c              TMSColor C language source code.
     vdp_colors.bmp          A reference of VDP colors to use in your images.
@@ -49,7 +49,7 @@ Currently for Sega Master System you should use the standard VDP colors, and you
 
 ### Notes
 
-The current official version is v3.0
+The current official version is v3.1
 
 CVBasic is available from https://github.com/nanochess/CVBasic
 
