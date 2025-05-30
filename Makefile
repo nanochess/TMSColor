@@ -2,8 +2,8 @@
 # by Oscar Toledo G.
 # https://github.com/nanochess/tmscolor
 #
-build: tmscolor.o pletter.o lodepng.o
-	@$(CC) tmscolor.o pletter.o lodepng.o -lm -o tmscolor
+tmscolor: tmscolor.o pletter.o lodepng.o
+	@$(CC) tmscolor.o pletter.o lodepng.o -lm -o $@
 
 clean:
 	@rm tmscolor.o pletter.o lodepng.o tmscolor

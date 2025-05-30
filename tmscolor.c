@@ -50,7 +50,7 @@ unsigned char *source;
 
 unsigned char *source2;
 unsigned char *ignore;
-unsigned char usage[24][32][32];
+static unsigned char usage[24][32][32];
 unsigned char sprites[2048];
 unsigned char attr[128];
 
