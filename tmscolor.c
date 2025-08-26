@@ -33,7 +33,7 @@
 #include <math.h>
 #include "lodepng.h"
 
-#define VERSION "3.1 May/14/2025"     /* Software version */
+#define VERSION "3.2 Aug/26/2025"     /* Software version */
 
 #define ROUND8(x)  ((x + 7) & ~7)
 
@@ -56,6 +56,7 @@ unsigned char attr[128];
 
 int use_bitmap = 0;
 int sms_mode = 0;
+int nes_mode = 0;
 
 /*
  ** Use this palette in your paint program
@@ -486,6 +487,24 @@ char *binary(int data)
 /*
  ** Converts a bitmap to a string
  */
+char *nes_color(unsigned char *data)
+{
+    static char string[9];
+    int color[8];
+    int c;
+    
+    for (c = 0; c < 8; c++) {
+        string[c] = ((data[0] & (0x80 >> c)) ? 1 : 0)
+                  | ((data[8] & (0x80 >> c)) ? 2 : 0);
+        string[c] += 0x30;
+    }
+    string[8] = '\0';
+    return string;
+}
+
+/*
+ ** Converts a bitmap to a string
+ */
 char *sms_color(unsigned char *data)
 {
     static char string[9];
@@ -494,9 +513,9 @@ char *sms_color(unsigned char *data)
     
     for (c = 0; c < 8; c++) {
         string[c] = ((data[0] & (0x80 >> c)) ? 1 : 0)
-        | ((data[1] & (0x80 >> c)) ? 2 : 0)
-        | ((data[2] & (0x80 >> c)) ? 4 : 0)
-        | ((data[3] & (0x80 >> c)) ? 8 : 0);
+                  | ((data[1] & (0x80 >> c)) ? 2 : 0)
+                  | ((data[2] & (0x80 >> c)) ? 4 : 0)
+                  | ((data[3] & (0x80 >> c)) ? 8 : 0);
         if (string[c] > 9)
             string[c] += 7;
         string[c] += 0x30;
@@ -526,7 +545,18 @@ void generate_data(FILE *output, unsigned char *data, int width, int length, int
         }
         free(data);
     } else if (use_bitmap && !literal) {
-        if (sms_mode) {
+        if (nes_mode) {
+            for (c = 0; c < length; c += 16) {
+                fprintf(output, "\tBITMAP \"%s\"\n", nes_color(&data[c + 0]));
+                fprintf(output, "\tBITMAP \"%s\"\n", nes_color(&data[c + 1]));
+                fprintf(output, "\tBITMAP \"%s\"\n", nes_color(&data[c + 2]));
+                fprintf(output, "\tBITMAP \"%s\"\n", nes_color(&data[c + 3]));
+                fprintf(output, "\tBITMAP \"%s\"\n", nes_color(&data[c + 4]));
+                fprintf(output, "\tBITMAP \"%s\"\n", nes_color(&data[c + 5]));
+                fprintf(output, "\tBITMAP \"%s\"\n", nes_color(&data[c + 6]));
+                fprintf(output, "\tBITMAP \"%s\"\n\n", nes_color(&data[c + 7]));
+            }
+        } else if (sms_mode) {
             for (c = 0; c < length; c += 32) {
                 fprintf(output, "\tBITMAP \"%s\"\n", sms_color(&data[c + 0]));
                 fprintf(output, "\tBITMAP \"%s\"\n", sms_color(&data[c + 4]));
@@ -628,6 +658,8 @@ int main(int argc, char *argv[])
         fprintf(stderr, "        Creates image for use with assembler code\n\n");
         fprintf(stderr, "    -sms   Sega Master System mode.\n");
         fprintf(stderr, "           Allows up to 448 tiles using -t\n");
+        fprintf(stderr, "    -nes   NES/Famicom mode.\n");
+        fprintf(stderr, "           Allows up to 256 tiles using -t\n");
         fprintf(stderr, "    -b     Generates CVBasic source code.\n");
         fprintf(stderr, "    -n     Removes CVBasic stub code for displaying.\n");
         fprintf(stderr, "    -z     Output file is compressed with Pletter.\n");
@@ -664,7 +696,11 @@ int main(int argc, char *argv[])
         if (c == 'b') {
             cvbasic = 1;
         } else if (c == 'n') {
-            remove_stub = 1;
+            if (tolower(argv[arg][2]) == 'e' && tolower(argv[arg][3]) == 's') {
+                nes_mode = 1;
+            } else {
+                remove_stub = 1;
+            }
         } else if (c == 'z') {
             pletter = 1;
         } else if (c == 'f') {
@@ -741,7 +777,29 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Error: Missing input file name\n");
         exit(2);
     }
-    if (sms_mode) {
+    if (nes_mode) {
+        if (magic_sprites) {
+            fprintf(stderr, "Warning: NES/Famicom mode doesn't require magic sprites\n");
+            magic_sprites = 0;
+        }
+        if (pletter) {
+            fprintf(stderr, "Warning: NES/Famicom doesn't support Pletter compression\n");
+            pletter = 0;
+        }
+        if (cvbasic == 0) {
+            fprintf(stderr, "Warning: NES/Famicom only can generate CVBasic code\n");
+            cvbasic = 1;
+        }
+        use_bitmap = 1;
+        if (start_tile < 0) {
+            fprintf(stderr, "Warning: Negative start tile, using 0\n");
+            start_tile = 0;
+        }
+        if (start_tile > 255) {
+            fprintf(stderr, "Warning: Out of range start tile, using 255\n");
+            start_tile = 255;
+        }
+    } else if (sms_mode) {
         if (magic_sprites) {
             fprintf(stderr, "Warning: Sega Master System mode doesn't require magic sprites\n");
             magic_sprites = 0;
@@ -942,7 +1000,11 @@ int main(int argc, char *argv[])
         exit(3);
     }
 
-    if (sms_mode) {
+    if (nes_mode) {
+        bitmap = malloc(size_x * size_y / 4);
+        color = NULL;
+        pattern = malloc((size_x + 7) / 8 * size_y / 8);
+    } else if (sms_mode) {
         bitmap = malloc(size_x * size_y / 2);
         color = NULL;
         pattern = malloc((size_x + 7) / 8 * size_y / 8 * 2);    /* Tile is word */
@@ -969,7 +1031,22 @@ int main(int argc, char *argv[])
         /*
          ** If asked for photo quality...
          */
-        if (photo && sms_mode) {
+        if (photo && nes_mode) {
+            double g;
+            
+            /*
+             ** Normal image
+             */
+            for (x = 0; x < size_x; x++) {
+                int best_color;
+                
+                buffer[0] = image[(y * size_x + x) * 3 + 2];
+                buffer[1] = image[(y * size_x + x) * 3 + 1];
+                buffer[2] = image[(y * size_x + x) * 3 + 0];
+                best_color = ((buffer[0] * 30 + buffer[1] * 59 + buffer[2] * 11) / 100) >> 6;
+                source[(flip_y ? size_y - 1 - y : y) * size_x + (flip_x ? size_x - 1 - x : x)] = best_color;
+            }
+        } else if (photo && sms_mode) {
             double g;
             
             /*
@@ -1308,7 +1385,26 @@ int main(int argc, char *argv[])
     }
 hack:
     //    fprintf(stderr, "Processing image...\n");
-    if (sms_mode) { /* Sega Master System mode */
+    if (nes_mode) { /* NES/Famicom mode */
+        for (c = 0; c < size_y; c++) {
+            for (d = 0; d < size_x; d += 8) {
+                unsigned int word;
+                
+                word = 0;
+                for (e = 0; e < 8; e++) {
+                    n = source[c * size_x + d + e];
+                    if (n & 1)
+                        word |= 0x80 >> e;
+                    if (n & 2)
+                        word |= 0x8000 >> e;
+                }
+                offset = c / 8 * (size_x * 2) + (c & 7) + (d * 2);
+                bitmap[offset] = word;
+                bitmap[offset + 8] = word >> 8;
+                offset++;
+            }
+        }
+    } else if (sms_mode) { /* Sega Master System mode */
         for (c = 0; c < size_y; c++) {
             offset = c / 8 * (size_x * 4) + (c & 7) * 4;
             for (d = 0; d < size_x; d += 8) {
@@ -1500,7 +1596,57 @@ hack:
      ** Tiled mode
      */
     if (tiled) {
-        if (sms_mode) { /* Sega Master System */
+        if (nes_mode) { /* NES/Famicom */
+            static unsigned char bit[256 * 16];
+            int start = start_tile;
+            int current = start;
+            int total_tiles;
+            
+            current = start;
+            memset(bit, 0, sizeof(bit));
+            for (c = 0; c < size_x / 8 * size_y / 8; c++) {
+                int flags;
+                
+                flags = 0;
+                for (e = start; e < (current > 256 ? 256 : current); e++) {
+                    if (memcmp(&bit[e * 16], &bitmap[c * 16], 16) == 0)
+                        break;
+                }
+                if (e == current) {
+                    if (current == 256) {
+                        fprintf(stderr, "Error: More than 256 tiles required at %d,%d\n", c % (size_x / 8), c / (size_x / 8));
+                        current++;
+                    } else if (current > 256) {
+                        current++;
+                    } else {
+                        memcpy(&bit[e * 16], &bitmap[c * 16], 16);
+                        current++;
+                    }
+                }
+                pattern[c] = e;
+            }
+            total_tiles = current - start;
+            fprintf(stderr, "Total used tiles: %d ($%02x-$%02x)\n", total_tiles, start_tile, current - 1);
+            if (remove_stub)
+                fprintf(output, "\t'\n\t' Recommended code:\n");
+            else
+                fprintf(output, "\t' Display image.\n");
+            fprintf(output, "\t%sSCREEN DISABLE\n", remove_stub ? "' " : "");
+            fprintf(output, "\t%sSCREEN %s_pattern,0,0,%d,%d,%d\n", remove_stub ? "' " : "", label, size_x / 8, size_y / 8, size_x / 8);
+            fprintf(output, "\t%sWAIT\n", remove_stub ? "' " : "");
+            fprintf(output, "\t%sSCREEN ENABLE\n", remove_stub ? "' " : "");
+            if (remove_stub)
+                fprintf(output, "\t'\n");
+            else
+                fprintf(output, "\tWHILE 1: WEND\n\n");
+            fprintf(output, "\t' Start tile = %d. Total_tiles = %d\n", start_tile, total_tiles);
+            fprintf(output, "\tCHRROM 0 PATTERN %d\n", start_tile);
+            generate_data(output, bit + start_tile * 16, 8, total_tiles * 16, 0, 0);
+            fprintf(output, "\n");
+            fprintf(output, "\t' Width = %d, height = %d\n", size_x / 8, size_y / 8);
+            fprintf(output, "%s_pattern:\n", label);
+            generate_data(output, pattern, size_x / 8, size_x / 8 * size_y / 8, 0, 1);
+        } else if (sms_mode) { /* Sega Master System */
             static unsigned char bit[512 * 32];
             int start = start_tile;
             int current = start;
@@ -1661,7 +1807,32 @@ hack:
             }
         }
     } else if (sprite_mode) {   /* Bitmap for sprites */
-        if (sms_mode) { /* Sega Master System */
+        if (nes_mode) { /* NES/Famicom */
+            unsigned char *final_bitmap;
+            unsigned char *p;
+            
+            final_bitmap = malloc(size_y * size_x / 4);
+            if (final_bitmap == NULL) {
+                fprintf(stderr, "Error: Unable to allocate memory to generate sprites\n");
+                exit(1);
+            }
+            p = final_bitmap;
+            for (c = 0; c < size_y; c += 16) {
+                for (d = 0; d < size_x; d += 8) {
+                    memcpy(p, bitmap + c / 8 * size_x * 2 + d * 2, 16);
+                    p += 16;
+                    memcpy(p, bitmap + (c / 8 + 1) * size_x * 2 + d * 2, 16);
+                    p += 16;
+                }
+            }
+            fprintf(output, "\t'\n");
+            fprintf(output, "%s:\n", label);
+            for (c = 0; c < p - final_bitmap; c += 32) {
+                generate_data(output, &final_bitmap[c], 8, 32, 0, 0);
+                fprintf(output, "\n");
+            }
+            free(final_bitmap);
+        } else if (sms_mode) { /* Sega Master System */
             unsigned char *final_bitmap;
             unsigned char *p;
             
@@ -1776,7 +1947,10 @@ hack:
         }
     } else {    /* Full graphic mode */
         if (cvbasic) {
-            if (sms_mode) {
+            if (nes_mode) {
+                fprintf(output, "%s_bitmap:\n", label);
+                generate_data(output, bitmap, 8, size_x * size_y / 4, pletter, 0);
+            } else if (sms_mode) {
                 fprintf(output, "%s_bitmap:\n", label);
                 generate_data(output, bitmap, 8, size_x * size_y / 2, pletter, 0);
             } else {
@@ -1800,7 +1974,10 @@ hack:
                 generate_data(output, color, 8, size_x * size_y / 8, pletter, 1);
             }
         } else {
-            if (sms_mode) {
+            if (nes_mode) {
+                fprintf(output, "%s_bitmap:\n", label);
+                generate_db(output, bitmap, 8, size_x * size_y / 4, pletter);
+            } else if (sms_mode) {
                 fprintf(output, "%s_bitmap:\n", label);
                 generate_db(output, bitmap, 8, size_x * size_y / 2, pletter);
             } else {
