@@ -1,4 +1,4 @@
-# TMSColor v3.1
+# TMSColor v3.2
 *(c) Copyright 2009-2025 Óscar Toledo Gutiérrez*
 *https://nanochess.org/*
 
@@ -13,6 +13,7 @@ Converts a BMP/PNG image to TMS9928 bitmap/color format, Sega Master System form
 ### Usage guide
 
     tmscolor [options] image.bmp image.asm [label]
+    tmscolor [options] image.png image.asm [label]
     
     -sms   Generates Sega Master System format.
     -nes   Generates NES/Famicom format.
