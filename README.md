@@ -2,7 +2,7 @@
 *(c) Copyright 2009-2025 Óscar Toledo Gutiérrez*
 *https://nanochess.org/*
 
-Converts a BMP/PNG image to TMS9928 bitmap/color format or Sega Master System format.
+Converts a BMP/PNG image to TMS9928 bitmap/color format, Sega Master System format, or NES/Famicom format.
 
     tmscolor.c              TMSColor C language source code.
     vdp_colors.bmp          A reference of VDP TMS9928 colors to use in your images.
