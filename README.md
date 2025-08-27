@@ -5,7 +5,7 @@
 Converts a BMP/PNG image to TMS9928 bitmap/color format or Sega Master System format.
 
     tmscolor.c              TMSColor C language source code.
-    vdp_colors.bmp          A reference of VDP colors to use in your images.
+    vdp_colors.bmp          A reference of VDP TMS9928 colors to use in your images.
     LICENSE                 Source code license.
     README.md               This file.
 
@@ -15,7 +15,8 @@ Converts a BMP/PNG image to TMS9928 bitmap/color format or Sega Master System fo
     tmscolor [options] image.bmp image.asm [label]
     
     -sms   Generates Sega Master System format.
-    -b     Generates CVBasic source code.
+    -nes   Generates NES/Famicom format.
+    -b     Generates CVBasic source code (use always for NES/Famicom)
     -n     Removes CVBasic stub code for displaying.
     -s     Process tiles in chunks of 16 pixels high (sprites).
     -sb    Same as above but generates readable bitmap statements (CVBasic mode)
@@ -42,14 +43,18 @@ Or for CVBasic:
     
     tmscolor -b -p2 photo.bmp photo.bas
     
-Photos will look better if the contrast is good. Magic sprites will work only with an image of 256x192 pixels.
+Photos will look better if the contrast is good. Magic sprites will work only with an image of 256x192 pixels, and only for TMS9928.
 
-Currently for Sega Master System you should use the standard VDP colors, and you can provide your palette inside your game or program (for example, using the PALETTE LOAD sentence of CVBasic). It is way easier than trying to calculate a palette inside TMSColor.
+For Sega Master System you should use the standard VDP colors, and you can provide your palette inside your game or program (for example, using the PALETTE LOAD sentence of CVBasic). It is way easier than trying to calculate a palette inside TMSColor.
+
+For NES/Famicom you should use the standard TMS9928 VDP colors, the lower two bits of the color are used for the NES bitmap, and you can provide your palette inside your game or program (also using the PALETTE LOAD sentence). If you have black areas (RGB #000000), use the option -e10 to translate the standard black color (1) into the zero (0) used for NES/Famicom backgrounds, or use the RGB color #404040.
+
+Also for NES/Famicom both -p1 and -p2 will translate the image into grayscale and generate a four tone image.
 
 
 ### Notes
 
-The current official version is v3.1
+The current official version is v3.2
 
 CVBasic is available from https://github.com/nanochess/CVBasic
 
