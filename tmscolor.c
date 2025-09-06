@@ -1081,9 +1081,13 @@ int main(int argc, char *argv[])
             double b;
             
             for (x = 0; x < size_x; ) {
-                buffer[0] = image[(y * size_x + x) * 3 + 2];
-                buffer[1] = image[(y * size_x + x) * 3 + 1];
-                buffer[2] = image[(y * size_x + x) * 3 + 0];
+                for (e = 0; e < 32; e += 4) {
+                    buffer[e + 0] = image[(y * size_x + x) * 3 + 2];
+                    buffer[e + 1] = image[(y * size_x + x) * 3 + 1];
+                    buffer[e + 2] = image[(y * size_x + x) * 3 + 0];
+                    x++;
+                }
+                x -= 8;
                 best_combo_difference = 1e38;
                 
                 /*
