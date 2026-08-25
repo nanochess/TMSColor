@@ -1105,7 +1105,7 @@ int main(int argc, char *argv[])
                             if (photo == 2) {
                                 g = (g < r) ? g : r;
                                 r = sqrt(sqr(colors[d * 3 + 2] - colors[c * 3 + 2])
-                                         + sqr(colors[d * 3 + 1] - colors[d * 3 + 1])
+                                         + sqr(colors[d * 3 + 1] - colors[c * 3 + 1])
                                          + sqr(colors[d * 3 + 0] - colors[d * 3 + 0]));
                                 if (r < 96) {
                                     unsigned char extra[3];
@@ -1705,7 +1705,7 @@ hack:
                 fprintf(output, "\t%sMODE 4\n", remove_stub ? "' " : "");
                 if (!pletter && total_tiles > 255) {
                     fprintf(output, "\t%sDEFINE CHAR %s%d,%d,%s_char_0\n", remove_stub ? "' " : "", pletter ? "PLETTER " : "", start_tile, 255, label);
-                    fprintf(output, "\t%sDEFINE CHAR %s%d,%d,%s_char_1\n", remove_stub ? "' " : "", pletter ? "PLETTER " : "", start_tile, total_tiles - 255, label);
+                    fprintf(output, "\t%sDEFINE CHAR %s%d,%d,%s_char_1\n", remove_stub ? "' " : "", pletter ? "PLETTER " : "", start_tile + 255, total_tiles - 255, label);
                 } else {
                     fprintf(output, "\t%sDEFINE CHAR %s%d,%d,%s_char\n", remove_stub ? "' " : "", pletter ? "PLETTER " : "", start_tile, total_tiles, label);
                 }
